@@ -647,12 +647,15 @@
   }
   function normDate(s){ return String(s).slice(0,10); }
   function upsert(list, entry){
-    var k = normDate(entry.d);
+    var k = normDate(entry.d), replaced = false;
     for (var i = 0; i < list.length; i++){
-      if (normDate(list[i].d) === k){ list[i] = entry; return; }
+      if (normDate(list[i].d) === k){ list[i] = entry; replaced = true; break; }
     }
-    list.push(entry);
-    list.sort(function(a, b){ return normDate(a.d) < normDate(b.d) ? -1 : 1; });
+    if (!replaced) list.push(entry);
+    list.sort(function(a, b){
+      var ad = normDate(a.d), bd = normDate(b.d);
+      return ad < bd ? -1 : (ad > bd ? 1 : 0);
+    });
   }
   function seedWeights(){
     return [ { d: iso(7), w: 62 }, { d: iso(0), w: 62 } ];
