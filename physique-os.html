@@ -203,6 +203,18 @@
   .cue i{font-style:normal;font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:700;color:var(--em);letter-spacing:1px;text-transform:uppercase;background:rgba(255,106,61,.14);padding:3px 7px;border-radius:6px;flex:none;margin-top:1px}
   .stage-note{font-size:11px;color:var(--muted);margin-top:12px;text-align:center}
 
+  .finish-btn{
+    width:100%;margin-top:16px;padding:13px 16px;border-radius:13px;cursor:pointer;
+    border:1px solid rgba(255,106,61,.5);color:var(--txt);
+    background:linear-gradient(135deg, rgba(255,106,61,.16), rgba(255,194,75,.10));
+    font-family:'Inter',sans-serif;font-size:13.5px;font-weight:600;letter-spacing:.3px;
+    transition:transform .15s,box-shadow .2s,border-color .2s;
+  }
+  .finish-btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(255,106,61,.28);border-color:var(--em)}
+  .finish-btn.ok{background:var(--burn);color:#191105;border-color:transparent}
+  .chip.streak.pop{box-shadow:0 0 0 rgba(255,106,61,0);animation:chipPop .7s ease}
+  @keyframes chipPop{30%{transform:scale(1.12);box-shadow:0 0 22px rgba(255,106,61,.5)}100%{transform:scale(1)}}
+
   /* ---------- WATER ---------- */
   .w-target{font-family:'Space Grotesk',sans-serif;font-size:34px;font-weight:700;color:var(--cyan);letter-spacing:-.5px}
   .w-target span{font-size:14px;color:var(--muted);font-weight:500}
@@ -317,7 +329,7 @@
     <div class="hdr-meta">
       <span class="chip"><span class="dot"></span><b id="todayDate">Monday</b> · Aug 10, 2026</span>
       <span class="chip">Today's session: <b>Full-Body Strength · Day 1</b></span>
-      <span class="chip streak">🔥 <b id="streakNum">0</b>-day streak</span>
+      <span class="chip streak" id="streakChip">🔥 <b id="streakNum">0</b>-day streak</span>
     </div>
   </header>
 
@@ -454,6 +466,7 @@
           <div class="cue" id="cue"></div>
         </div>
       </div>
+      <button type="button" class="finish-btn" id="finishBtn">Complete today's session — keep the streak 🔥</button>
       <div class="stage-note">Tap an exercise to switch the demo · Row needs two towels + a sturdy door handle</div>
     </section>
 
@@ -618,7 +631,7 @@
 
   /* ---------------- DATABASE (local, with in-memory fallback) ---------------- */
   var DB_KEY = "forge_db_v1";
-  var db = { weights: [], sleeps: [] };
+  var db = { weights: [], sleeps: [], days: [] };
 
   function iso(off){
     var d = new Date();
@@ -676,10 +689,12 @@
         var x = JSON.parse(raw);
         if (x && Array.isArray(x.weights)) db.weights = x.weights;
         if (x && Array.isArray(x.sleeps)) db.sleeps = x.sleeps;
+        if (x && Array.isArray(x.days)) db.days = x.days;
       }
     } catch(e){}
     if (!db.weights || !db.weights.length) db.weights = seedWeights();
     if (!db.sleeps || !db.sleeps.length) db.sleeps = seedSleeps();
+    if (!db.days || !db.days.length) db.days = [];
   }
   function saveDB(){
     try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch(e){}
@@ -687,6 +702,39 @@
   function flash(el){
     el.classList.add("err");
     setTimeout(function(){ el.classList.remove("err"); }, 700);
+  }
+
+  /* ---------------- STREAK (trains-per-day history in db.days) ---------------- */
+  function dISO(d){
+    var m = ("0" + (d.getMonth()+1)).slice(-2);
+    var day = ("0" + d.getDate()).slice(-2);
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+  function computeStreak(){
+    var set = {};
+    db.days.forEach(function(d){ if (d) set[normDate(d)] = 1; });
+    if (!set[iso(0)]){
+      var y = new Date(); y.setDate(y.getDate() - 1);
+      if (!set[dISO(y)]) return 0;
+    }
+    var cursor = new Date();
+    if (!set[iso(0)]) cursor.setDate(cursor.getDate() - 1);
+    var streak = 0;
+    while (set[dISO(cursor)]){ streak++; cursor.setDate(cursor.getDate() - 1); }
+    return streak;
+  }
+  function logTrainingComplete(){
+    var t = iso(0);
+    if (db.days.indexOf(t) === -1) db.days.push(t);
+    saveDB();
+    var s = computeStreak();
+    countUp($("streakNum"), s, {dur:600});
+    var chip = $("streakChip");
+    chip.classList.remove("pop"); void chip.offsetWidth; chip.classList.add("pop");
+    var btn = $("finishBtn");
+    btn.classList.add("ok");
+    btn.textContent = "Day logged — " + s + (s === 1 ? " day" : " days") + " streak 🔥";
+    setTimeout(function(){ btn.classList.remove("ok"); }, 1600);
   }
 
   /* ---------------- BODY WEIGHT (DRIVEN BY DB) ---------------- */
@@ -988,6 +1036,7 @@
   function init(){
     buildHeader();
     loadDB();
+    $("streakNum").textContent = computeStreak();
     weightView(false);
     buildMeals();
     buildExList();
@@ -1005,6 +1054,7 @@
     $("wtInput").addEventListener("keydown", function(e){ if (e.key === "Enter") logWeight(); });
     $("sleepBed").addEventListener("keydown", function(e){ if (e.key === "Enter") logSleep(); });
     $("sleepWake").addEventListener("keydown", function(e){ if (e.key === "Enter") logSleep(); });
+    $("finishBtn").addEventListener("click", logTrainingComplete);
   }
 
   window.__forge = {
